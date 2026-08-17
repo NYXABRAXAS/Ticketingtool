@@ -19,6 +19,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # With NODE_ENV=production, npm install skips devDependencies by default - but
+      # typescript/prisma/tsx/@types/* (needed to build and to run prisma:seed) live
+      # there. This forces npm to install them anyway; it has no effect on the app's
+      # own runtime behavior, which still reads NODE_ENV=production above.
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
       - key: PORT
         value: 10000
 
