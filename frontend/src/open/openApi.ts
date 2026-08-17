@@ -48,6 +48,7 @@ export const openApi = {
   getTrackers: () => request<RedmineOption[]>("/trackers"),
   getStatuses: () => request<RedmineOption[]>("/statuses"),
   getPriorities: () => request<RedmineOption[]>("/priorities"),
+  getProjectMembers: (projectId: number) => request<RedmineOption[]>(`/projects/${projectId}/members`),
   getIssues: (projectId: number) => request<OpenIssue[]>(`/issues?projectId=${projectId}`),
   getIssue: (id: number) => request<OpenIssue>(`/issues/${id}`),
   createIssue: (body: { projectId: number; subject: string; description: string; trackerId?: number; priorityId?: number; assignedToId?: number }) =>

@@ -60,6 +60,18 @@ openRouter.get("/users", async (_req, res, next) => {
   }
 });
 
+// Assignee candidates for a specific project - works for any account with access to
+// the project, unlike /users.json which requires a Redmine admin API key.
+openRouter.get("/projects/:projectId/members", async (req, res, next) => {
+  try {
+    const projectId = Number(req.params.projectId);
+    if (!projectId) throw new ApiError(400, "INVALID_REQUEST", "Invalid projectId.");
+    res.json(await redmineClient.getProjectMembers(projectId));
+  } catch (err) {
+    next(err);
+  }
+});
+
 openRouter.get("/trackers", async (_req, res, next) => {
   try {
     res.json(await redmineClient.getTrackers());

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { openApi, OpenIssue, RedmineOption, RedmineUserOption } from "./openApi";
+import { openApi, OpenIssue, RedmineOption } from "./openApi";
 
 export function IssueDetail({ issueId, onBack }: { issueId: number; onBack: () => void }) {
   const [issue, setIssue] = useState<OpenIssue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<RedmineOption[]>([]);
   const [priorities, setPriorities] = useState<RedmineOption[]>([]);
-  const [users, setUsers] = useState<RedmineUserOption[]>([]);
+  const [members, setMembers] = useState<RedmineOption[]>([]);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -18,8 +18,11 @@ export function IssueDetail({ issueId, onBack }: { issueId: number; onBack: () =
     load();
     openApi.getStatuses().then(setStatuses).catch(() => undefined);
     openApi.getPriorities().then(setPriorities).catch(() => undefined);
-    openApi.getUsers().then(setUsers).catch(() => undefined);
   }, [load]);
+
+  useEffect(() => {
+    if (issue) openApi.getProjectMembers(issue.project.id).then(setMembers).catch(() => undefined);
+  }, [issue?.project.id]);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -108,7 +111,7 @@ export function IssueDetail({ issueId, onBack }: { issueId: number; onBack: () =
             <label>Assigned To</label>
             <select disabled={busy} value={issue.assignedTo?.id ?? ""} onChange={(e) => run(() => openApi.updateIssue(issue.id, { assignedToId: e.target.value ? Number(e.target.value) : null }))}>
               <option value="">Unassigned</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.firstname} {u.lastname}</option>)}
+              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div className="form-field">

@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { openApi, RedmineOption, RedmineUserOption } from "./openApi";
+import { openApi, RedmineOption } from "./openApi";
 
 export function CreateIssue({ projectId, onCreated, onCancel }: { projectId: number; onCreated: (id: number) => void; onCancel: () => void }) {
   const [trackers, setTrackers] = useState<RedmineOption[]>([]);
   const [priorities, setPriorities] = useState<RedmineOption[]>([]);
-  const [users, setUsers] = useState<RedmineUserOption[]>([]);
+  const [members, setMembers] = useState<RedmineOption[]>([]);
 
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -18,8 +18,8 @@ export function CreateIssue({ projectId, onCreated, onCancel }: { projectId: num
   useEffect(() => {
     openApi.getTrackers().then(setTrackers).catch(() => undefined);
     openApi.getPriorities().then(setPriorities).catch(() => undefined);
-    openApi.getUsers().then(setUsers).catch(() => undefined);
-  }, []);
+    openApi.getProjectMembers(projectId).then(setMembers).catch(() => undefined);
+  }, [projectId]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,8 +81,9 @@ export function CreateIssue({ projectId, onCreated, onCancel }: { projectId: num
           <label>Assign To</label>
           <select value={assignedToId} onChange={(e) => setAssignedToId(e.target.value)}>
             <option value="">Unassigned</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.firstname} {u.lastname}</option>)}
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
+          {members.length === 0 && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>No members found for this project in Redmine.</span>}
         </div>
         <div className="form-field">
           <label>Attachment (optional)</label>

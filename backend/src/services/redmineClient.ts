@@ -150,6 +150,23 @@ export const redmineClient = {
     return paginateAll<RedmineUser>("users.json", "users");
   },
 
+  // /users.json requires the API key to belong to a Redmine admin account and returns
+  // nothing useful otherwise. Project memberships are visible to any account with
+  // access to the project, and are the actually-correct scope for "who can this issue
+  // be assigned to" anyway.
+  async getProjectMembers(projectId: number): Promise<{ id: number; name: string }[]> {
+    const memberships = await paginateAll<{
+      user?: { id: number; name: string };
+      group?: { id: number; name: string };
+    }>(`projects/${projectId}/memberships.json`, "memberships");
+
+    const byId = new Map<number, string>();
+    for (const m of memberships) {
+      if (m.user) byId.set(m.user.id, m.user.name);
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name }));
+  },
+
   async getTrackers(): Promise<{ id: number; name: string }[]> {
     const data = await redmineRequest<{ trackers: { id: number; name: string }[] }>({ path: "trackers.json" });
     return data.trackers;
