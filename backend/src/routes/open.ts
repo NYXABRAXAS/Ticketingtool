@@ -161,6 +161,7 @@ const createSchema = z.object({
   trackerId: z.number().int().optional(),
   priorityId: z.number().int().optional(),
   assignedToId: z.number().int().optional(),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 openRouter.post("/issues", async (req, res, next) => {
@@ -172,13 +173,11 @@ openRouter.post("/issues", async (req, res, next) => {
       projectId: parsed.data.projectId,
       subject: parsed.data.subject,
       description: parsed.data.description,
+      trackerId: parsed.data.trackerId,
       priorityId: parsed.data.priorityId,
       assignedToId: parsed.data.assignedToId,
+      dueDate: parsed.data.dueDate,
     });
-
-    if (parsed.data.trackerId) {
-      await redmineClient.updateIssue(issue.id, { tracker_id: parsed.data.trackerId });
-    }
 
     allIssuesCache = null;
     res.status(201).json({ id: issue.id });

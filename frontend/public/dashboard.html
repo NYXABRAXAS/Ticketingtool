@@ -47,7 +47,7 @@
                 <div class="flex items-center gap-3">
                     <div class="h-10 border-l-4 border-slate-700 pl-3">
                         <h1 class="text-xl font-black">PROHORIZON <span class="text-[#D32F2F]">DIGITECH</span></h1>
-                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Loan Origination System | OPTIM &mdash; Open Access, No Login</p>
+                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Loan Origination System | OPTIM</p>
                     </div>
                 </div>
 
@@ -165,6 +165,10 @@
                 </div>
             </div>
             <div class="mb-3">
+                <label class="field-label">Due Date</label>
+                <input id="createDueDate" type="date" class="field-input">
+            </div>
+            <div class="mb-3">
                 <label class="field-label">Subject</label>
                 <input id="createSubject" type="text" class="field-input" maxlength="255">
             </div>
@@ -174,7 +178,11 @@
             </div>
             <div class="mb-4">
                 <label class="field-label">Attachment (optional)</label>
-                <input id="createAttachment" type="file" accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx,.txt" class="text-xs">
+                <div id="attachmentDropZone" class="border border-dashed border-slate-300 rounded p-3 text-center" tabindex="0">
+                    <input id="createAttachment" type="file" accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx,.txt" class="text-xs">
+                    <p class="text-[10px] text-slate-400 font-bold mt-2">or click here and paste (Ctrl+V) a screenshot</p>
+                </div>
+                <div id="attachmentPreview" class="hidden mt-2 flex items-center gap-3 border border-slate-200 rounded p-2"></div>
             </div>
 
             <div class="flex gap-2">
@@ -505,6 +513,8 @@ function searchTable() {
 
 // --- Create Issue ---
 
+let pendingAttachmentFile = null;
+
 function setCreateError(message) {
     const el = document.getElementById("createError");
     if (!message) {
@@ -516,12 +526,53 @@ function setCreateError(message) {
     el.innerText = message;
 }
 
+function setPendingAttachment(file) {
+    pendingAttachmentFile = file || null;
+    const preview = document.getElementById("attachmentPreview");
+
+    if (!pendingAttachmentFile) {
+        preview.classList.add("hidden");
+        preview.innerHTML = "";
+        return;
+    }
+
+    const sizeKb = Math.round(pendingAttachmentFile.size / 1024);
+    const isImage = pendingAttachmentFile.type.startsWith("image/");
+    const thumb = isImage
+        ? `<img src="${URL.createObjectURL(pendingAttachmentFile)}" class="w-12 h-12 object-cover rounded border border-slate-200">`
+        : `<div class="w-12 h-12 flex items-center justify-center rounded border border-slate-200 text-slate-400 text-[9px] font-black uppercase">FILE</div>`;
+
+    preview.innerHTML = `
+        ${thumb}
+        <div class="flex-1 text-left">
+            <div class="text-xs font-bold text-slate-800">${escapeHtml(pendingAttachmentFile.name)}</div>
+            <div class="text-[10px] text-slate-400 font-bold">${sizeKb} KB</div>
+        </div>
+        <button type="button" onclick="setPendingAttachment(null); document.getElementById('createAttachment').value = '';" class="text-[10px] font-black uppercase text-red-700">Remove</button>
+    `;
+    preview.classList.remove("hidden");
+}
+
+document.getElementById("createAttachment").addEventListener("change", (e) => setPendingAttachment(e.target.files[0]));
+
+// Lets a user click the drop zone, hit Ctrl+V, and attach whatever screenshot is on
+// their clipboard - no save-to-disk-then-browse round trip.
+document.getElementById("attachmentDropZone").addEventListener("paste", (e) => {
+    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+    if (!item) return;
+    e.preventDefault();
+    const file = item.getAsFile();
+    if (file) setPendingAttachment(new File([file], file.name || `pasted-screenshot-${Date.now()}.png`, { type: file.type }));
+});
+
 async function openCreateModal() {
     setCreateError("");
     document.getElementById("createModal").classList.remove("hidden");
     document.getElementById("createSubject").value = "";
     document.getElementById("createDescription").value = "";
+    document.getElementById("createDueDate").value = "";
     document.getElementById("createAttachment").value = "";
+    setPendingAttachment(null);
 
     try {
         const [projects, trackers, priorities] = await Promise.all([
@@ -564,9 +615,9 @@ async function submitCreateIssue() {
     const trackerId = Number(document.getElementById("createTracker").value) || undefined;
     const priorityId = Number(document.getElementById("createPriority").value) || undefined;
     const assignedToId = document.getElementById("createAssignee").value ? Number(document.getElementById("createAssignee").value) : undefined;
+    const dueDate = document.getElementById("createDueDate").value || undefined;
     const subject = document.getElementById("createSubject").value.trim();
     const description = document.getElementById("createDescription").value.trim();
-    const file = document.getElementById("createAttachment").files[0];
 
     if (!projectId) { setCreateError("Select a project."); return; }
     if (!subject) { setCreateError("Subject is required."); return; }
@@ -579,14 +630,14 @@ async function submitCreateIssue() {
         const res = await fetch(`${OPEN_API}/issues`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ projectId, trackerId, priorityId, assignedToId, subject, description }),
+            body: JSON.stringify({ projectId, trackerId, priorityId, assignedToId, dueDate, subject, description }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Could not create issue.");
 
-        if (file) {
+        if (pendingAttachmentFile) {
             const form = new FormData();
-            form.append("file", file);
+            form.append("file", pendingAttachmentFile);
             await fetch(`${OPEN_API}/issues/${data.id}/attachments`, { method: "POST", body: form }).catch(() => undefined);
         }
 

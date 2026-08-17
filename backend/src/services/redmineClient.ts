@@ -209,10 +209,11 @@ export const redmineClient = {
     projectId: number;
     subject: string;
     description: string;
-    trackerName?: string;
+    trackerId?: number;
     priorityId?: number;
     assignedToId?: number;
     authorId?: number;
+    dueDate?: string;
     customFields?: { id: number; value: string }[];
   }): Promise<RedmineIssue> {
     const data = await redmineRequest<{ issue: RedmineIssue }>({
@@ -223,8 +224,10 @@ export const redmineClient = {
           project_id: params.projectId,
           subject: params.subject,
           description: params.description,
+          tracker_id: params.trackerId,
           priority_id: params.priorityId,
           assigned_to_id: params.assignedToId,
+          due_date: params.dueDate,
           custom_fields: params.customFields,
         },
       },
