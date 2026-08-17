@@ -2,11 +2,16 @@
 # Deploys the backend as a Node web service (bound to 0.0.0.0:$PORT) with a managed
 # Postgres database, and the frontend as a static site. `sync: false` means the value
 # must be entered once in the Render dashboard - it is never stored in this file or git.
+#
+# Backend + database are on Render's free plan so this deploys without a payment
+# method on file. Tradeoffs: the free web service spins down after inactivity
+# (~50s cold start on the next request) and the free Postgres database expires
+# after 30-90 days unless upgraded. Bump `plan:` to `starter` below for production.
 services:
   - type: web
     name: los-ticketing-backend
     runtime: node
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: npm install && npm run build
     startCommand: npm run prisma:migrate:deploy && npm run prisma:seed && npm start
@@ -73,4 +78,4 @@ services:
 
 databases:
   - name: los-ticketing-db
-    plan: starter
+    plan: free
