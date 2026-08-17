@@ -1,0 +1,406 @@
+// LOS Ticketing Tool - Prisma schema
+// Postgres. Redmine remains the workflow engine of record for issue state;
+// this schema is the multi-tenant mapping/audit/cache layer in front of it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Multi-tenant client / project topology
+// ---------------------------------------------------------------------------
+
+model Client {
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g. "ESAF" - used as clientId claim in launch tokens
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects        Project[]
+  losUsers        LosUserMapping[]
+  allowedOrigins  AllowedOrigin[]
+  integrationKeys IntegrationSecret[]
+  tickets         Ticket[]
+
+  @@map("clients")
+}
+
+model Project {
+  id                  String   @id @default(uuid())
+  clientId            String
+  code                String // e.g. "ESAF-LOS" - used as projectId claim in launch tokens
+  name                String
+  redmineProjectId    Int
+  redmineProjectIdent String
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  client             Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  losUsers           LosUserMapping[]
+  assigneeMappings   AssigneeMapping[]
+  tickets            Ticket[]
+  slaRules           SlaRule[]
+
+  @@unique([clientId, code])
+  @@index([clientId])
+  @@map("projects")
+}
+
+// LOS user -> internal ticketing identity -> Redmine user
+model LosUserMapping {
+  id             String   @id @default(uuid())
+  clientId       String
+  projectId      String
+  losUserId      String // the user id as known inside the LOS
+  losUsername    String
+  displayName    String
+  email          String?
+  role           String   @default("LOS_USER") // LOS_USER | LOS_SUPPORT | INTERNAL_SUPPORT | INTERNAL_ADMIN
+  redmineUserId  Int?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastLoginAt    DateTime?
+
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project           Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  permissions       UserPermission[]
+  ticketsCreated    Ticket[]            @relation("TicketCreatedBy")
+  ticketsAssigned   Ticket[]            @relation("TicketAssignedTo")
+  comments          TicketComment[]
+  attachments       TicketAttachment[]
+  history           TicketHistory[]
+  auditLogs         AuditLog[]
+
+  // A LOS user gets one mapping row per project they've been launched into, so a user
+  // authorized for multiple projects can switch between them (see GET/POST /api/projects).
+  @@unique([clientId, projectId, losUserId])
+  @@index([clientId, losUserId])
+  @@index([projectId])
+  @@map("los_user_mapping")
+}
+
+model UserPermission {
+  id            String @id @default(uuid())
+  userMappingId String
+  permission    String // TICKET_VIEW, TICKET_CREATE, TICKET_COMMENT, TICKET_ATTACHMENT, TICKET_ASSIGN, TICKET_REASSIGN,
+                        // TICKET_STATUS_CHANGE, TICKET_CLOSE, TICKET_EDIT, VIEW_ALL_PROJECT_TICKETS, REPORTS_VIEW
+
+  user LosUserMapping @relation(fields: [userMappingId], references: [id], onDelete: Cascade)
+
+  @@unique([userMappingId, permission])
+  @@map("user_permissions")
+}
+
+// Who is allowed to be selected as "Assign To" for a given project
+model AssigneeMapping {
+  id            String  @id @default(uuid())
+  projectId     String
+  redmineUserId Int
+  displayName   String
+  email         String?
+  active        Boolean @default(true)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, redmineUserId])
+  @@index([projectId])
+  @@map("assignee_mapping")
+}
+
+model AllowedOrigin {
+  id       String  @id @default(uuid())
+  clientId String?
+  origin   String  @unique
+  active   Boolean @default(true)
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("allowed_origins")
+}
+
+// Per-LOS shared secret used to authenticate server-to-server launch-token requests
+model IntegrationSecret {
+  id          String   @id @default(uuid())
+  clientId    String
+  label       String
+  secretHash  String // bcrypt hash of the secret; the plaintext is shown once at creation
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime?
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("integration_secrets")
+}
+
+// Replay protection for launch tokens
+model UsedLaunchNonce {
+  nonce     String   @id
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("used_launch_nonces")
+}
+
+// ---------------------------------------------------------------------------
+// Ticket configuration (admin-editable, not hardcoded)
+// ---------------------------------------------------------------------------
+
+model TicketType {
+  id      String  @id @default(uuid())
+  name    String  @unique
+  active  Boolean @default(true)
+  sortOrder Int   @default(0)
+
+  tickets Ticket[]
+
+  @@map("ticket_types")
+}
+
+model TicketModule {
+  id        String  @id @default(uuid())
+  name      String  @unique
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  tickets Ticket[]
+
+  @@map("ticket_modules")
+}
+
+model TicketPriority {
+  id                String  @id @default(uuid())
+  name              String  @unique // Low, Medium, High, Critical
+  redminePriorityId Int?
+  active            Boolean @default(true)
+  sortOrder         Int     @default(0)
+
+  tickets  Ticket[]
+  slaRules SlaRule[]
+
+  @@map("ticket_priorities")
+}
+
+model TicketStatus {
+  id              String  @id @default(uuid())
+  name            String  @unique // Open, Assigned, In Progress, Pending Client, Pending Development, Resolved, Reopened, Closed
+  redmineStatusId Int?
+  isClosed        Boolean @default(false)
+  sortOrder       Int     @default(0)
+  active          Boolean @default(true)
+
+  tickets        Ticket[]
+  fromTransitions StatusTransition[] @relation("FromStatus")
+  toTransitions   StatusTransition[] @relation("ToStatus")
+
+  @@map("ticket_statuses")
+}
+
+model StatusTransition {
+  id           String @id @default(uuid())
+  fromStatusId String
+  toStatusId   String
+
+  fromStatus TicketStatus @relation("FromStatus", fields: [fromStatusId], references: [id], onDelete: Cascade)
+  toStatus   TicketStatus @relation("ToStatus", fields: [toStatusId], references: [id], onDelete: Cascade)
+
+  @@unique([fromStatusId, toStatusId])
+  @@map("status_transitions")
+}
+
+model SlaRule {
+  id          String   @id @default(uuid())
+  projectId   String?
+  priorityId  String
+  responseMins Int
+  resolveMins  Int
+  active      Boolean  @default(true)
+
+  project  Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  priority TicketPriority @relation(fields: [priorityId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, priorityId])
+  @@map("sla_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Tickets
+// ---------------------------------------------------------------------------
+
+enum SyncStatus {
+  SYNCED
+  PENDING_SYNC
+  SYNC_FAILED
+}
+
+model Ticket {
+  id                String   @id @default(uuid())
+  ticketNumber      String   @unique // TKT-2026-000001
+  redmineIssueId    Int?     @unique
+  clientId          String
+  projectId         String
+  createdById       String
+  assignedToId      String?
+  ticketTypeId      String
+  moduleId          String
+  priorityId        String
+  statusId          String
+  subject           String
+  description       String   @db.Text
+  environment       String   // Development | UAT | Production
+  applicationNumber String?
+  loanNumber        String?
+  losContext        Json?    // los version, module, browser, os - non-sensitive only
+
+  slaDueAt   DateTime?
+  slaBreached Boolean  @default(false)
+
+  syncStatus   SyncStatus @default(PENDING_SYNC)
+  lastSyncedAt DateTime?
+  syncError    String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
+  closedAt   DateTime?
+
+  client      Client         @relation(fields: [clientId], references: [id])
+  project     Project        @relation(fields: [projectId], references: [id])
+  createdBy   LosUserMapping @relation("TicketCreatedBy", fields: [createdById], references: [id])
+  assignedTo  LosUserMapping? @relation("TicketAssignedTo", fields: [assignedToId], references: [id])
+  ticketType  TicketType     @relation(fields: [ticketTypeId], references: [id])
+  module      TicketModule   @relation(fields: [moduleId], references: [id])
+  priority    TicketPriority @relation(fields: [priorityId], references: [id])
+  status      TicketStatus   @relation(fields: [statusId], references: [id])
+
+  comments    TicketComment[]
+  attachments TicketAttachment[]
+  history     TicketHistory[]
+  notifications Notification[]
+
+  @@index([clientId])
+  @@index([projectId])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([statusId])
+  @@index([syncStatus])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id              String   @id @default(uuid())
+  ticketId        String
+  authorId        String
+  body            String   @db.Text
+  source          String   @default("TICKETING_TOOL") // TICKETING_TOOL | REDMINE
+  redmineJournalId Int?
+  createdAt       DateTime @default(now())
+
+  ticket Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author LosUserMapping @relation(fields: [authorId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_comments")
+}
+
+model TicketAttachment {
+  id                 String   @id @default(uuid())
+  ticketId           String
+  uploadedById       String
+  fileName           String
+  fileSize           Int
+  mimeType           String
+  redmineAttachmentId Int?
+  redmineDownloadUrl String?
+  createdAt          DateTime @default(now())
+
+  ticket     Ticket         @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  uploadedBy LosUserMapping @relation(fields: [uploadedById], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
+}
+
+model TicketHistory {
+  id        String   @id @default(uuid())
+  ticketId  String
+  actorId   String?
+  action    String // CREATE, ASSIGN, REASSIGN, STATUS_CHANGE, PRIORITY_CHANGE, COMMENT, ATTACHMENT, RESOLVE, REOPEN, CLOSE, EDIT, SYNC
+  fromValue String?
+  toValue   String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  ticket Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  LosUserMapping? @relation(fields: [actorId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_history")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userMappingId String
+  ticketId  String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([userMappingId, read])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  result     String // SUCCESS | FAILURE
+  detail     Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  actor LosUserMapping? @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Internal ticketing administrators (separate from LOS users entirely)
+// ---------------------------------------------------------------------------
+
+model AdminUser {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  role         String   @default("ADMIN") // ADMIN | SUPER_ADMIN
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  lastLoginAt  DateTime?
+
+  @@map("admin_users")
+}
+
+model IntegrationSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("integration_settings")
+}
