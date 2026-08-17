@@ -10,12 +10,14 @@ import { CreateTicket } from "./pages/CreateTicket";
 import { TicketDetails } from "./pages/TicketDetails";
 import { Reports } from "./pages/Reports";
 import { AdminApp } from "./admin/AdminApp";
+import { OpenApp } from "./open/OpenApp";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/admin/*" element={<AdminApp />} />
+        <Route path="/open" element={<OpenApp />} />
 
         <Route
           path="/*"

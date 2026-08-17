@@ -150,6 +150,21 @@ export const redmineClient = {
     return paginateAll<RedmineUser>("users.json", "users");
   },
 
+  async getTrackers(): Promise<{ id: number; name: string }[]> {
+    const data = await redmineRequest<{ trackers: { id: number; name: string }[] }>({ path: "trackers.json" });
+    return data.trackers;
+  },
+
+  async getIssueStatuses(): Promise<{ id: number; name: string; is_closed: boolean }[]> {
+    const data = await redmineRequest<{ issue_statuses: { id: number; name: string; is_closed: boolean }[] }>({ path: "issue_statuses.json" });
+    return data.issue_statuses;
+  },
+
+  async getIssuePriorities(): Promise<{ id: number; name: string; is_default: boolean }[]> {
+    const data = await redmineRequest<{ issue_priorities: { id: number; name: string; is_default: boolean }[] }>({ path: "enumerations/issue_priorities.json" });
+    return data.issue_priorities;
+  },
+
   async getIssue(redmineIssueId: number): Promise<RedmineIssue> {
     const data = await redmineRequest<{ issue: RedmineIssue }>({
       path: `issues/${redmineIssueId}.json`,

@@ -17,6 +17,7 @@ import { configRouter } from "./routes/config";
 import { healthRouter } from "./routes/health";
 import { webhooksRouter } from "./routes/webhooks";
 import { adminRouter } from "./routes/admin";
+import { openRouter } from "./routes/open";
 
 export function createApp() {
   const app = express();
@@ -44,6 +45,11 @@ export function createApp() {
   app.use("/api/config", configRouter);
   app.use("/api/webhooks", webhooksRouter);
   app.use("/api/admin", adminRouter);
+
+  // Unauthenticated Redmine proxy - tighter rate limit since there's no login to
+  // discourage abuse behind.
+  const openLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false });
+  app.use("/api/open", openLimiter, openRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
