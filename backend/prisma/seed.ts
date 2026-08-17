@@ -80,14 +80,16 @@ async function seedTransitions(statuses: { id: string; name: string }[]) {
 }
 
 async function seedDefaultSla(priorities: { id: string; name: string }[]) {
+  // Prisma's compound-unique `where` filter rejects `null` for a nullable member
+  // (projectId here) even though the column itself allows it, so upsert() can't be
+  // used directly against projectId_priorityId when projectId is null - find then
+  // create/update instead.
   const minutes: Record<string, number> = { Critical: 120, High: 240, Medium: 480, Low: 1440 };
   for (const p of priorities) {
     const resolveMins = minutes[p.name] ?? 1440;
-    await prisma.slaRule.upsert({
-      where: { projectId_priorityId: { projectId: null as any, priorityId: p.id } },
-      create: { projectId: null, priorityId: p.id, responseMins: Math.round(resolveMins / 4), resolveMins },
-      update: {},
-    });
+    const existing = await prisma.slaRule.findFirst({ where: { projectId: null, priorityId: p.id } });
+    if (existing) continue;
+    await prisma.slaRule.create({ data: { projectId: null, priorityId: p.id, responseMins: Math.round(resolveMins / 4), resolveMins } });
   }
 }
 

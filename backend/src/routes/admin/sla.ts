@@ -26,15 +26,19 @@ const upsertSchema = z.object({
   resolveMins: z.number().int().positive(),
 });
 
+// Prisma's compound-unique `where` filter rejects `null` for a nullable member
+// (projectId here) even though the column itself allows it, so upsert() can't be used
+// directly against projectId_priorityId when projectId is null - find then create/update.
 adminSlaRouter.post("/", async (req, res, next) => {
   try {
     const parsed = upsertSchema.safeParse(req.body);
     if (!parsed.success) throw new ApiError(400, "INVALID_REQUEST", parsed.error.errors.map((e) => e.message).join(", "));
-    const rule = await prisma.slaRule.upsert({
-      where: { projectId_priorityId: { projectId: parsed.data.projectId as any, priorityId: parsed.data.priorityId } },
-      create: parsed.data,
-      update: { responseMins: parsed.data.responseMins, resolveMins: parsed.data.resolveMins },
-    });
+
+    const existing = await prisma.slaRule.findFirst({ where: { projectId: parsed.data.projectId, priorityId: parsed.data.priorityId } });
+    const rule = existing
+      ? await prisma.slaRule.update({ where: { id: existing.id }, data: { responseMins: parsed.data.responseMins, resolveMins: parsed.data.resolveMins } })
+      : await prisma.slaRule.create({ data: parsed.data });
+
     res.status(201).json(rule);
   } catch (err) {
     next(err);
