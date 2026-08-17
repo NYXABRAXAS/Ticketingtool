@@ -44,6 +44,44 @@ function serializeIssue(issue: RedmineIssue) {
   };
 }
 
+// Public, non-secret info only (never the API key) - lets a static frontend build a
+// "view in Redmine" link without hardcoding the Redmine host.
+openRouter.get("/config", (_req, res) => {
+  res.json({ redmineBaseUrl: env.redmineBaseUrl.replace(/\/$/, "") });
+});
+
+function slimIssue(issue: RedmineIssue) {
+  return {
+    id: issue.id,
+    project: { name: issue.project.name },
+    tracker: { name: issue.tracker.name },
+    status: { name: issue.status.name },
+    assigned_to: issue.assigned_to ? { name: issue.assigned_to.name } : null,
+    subject: issue.subject,
+    created_on: issue.created_on,
+    due_date: issue.due_date ?? null,
+  };
+}
+
+const ALL_ISSUES_CACHE_TTL_MS = 30_000;
+let allIssuesCache: { data: ReturnType<typeof slimIssue>[]; expiresAt: number } | null = null;
+
+// Cross-project dashboard feed. Cached briefly since this is unauthenticated and a
+// full cross-project pull can be a lot of paginated Redmine requests.
+openRouter.get("/issues/all", async (_req, res, next) => {
+  try {
+    if (allIssuesCache && allIssuesCache.expiresAt > Date.now()) {
+      return res.json(allIssuesCache.data);
+    }
+    const issues = await redmineClient.getAllIssues();
+    const slim = issues.map(slimIssue);
+    allIssuesCache = { data: slim, expiresAt: Date.now() + ALL_ISSUES_CACHE_TTL_MS };
+    res.json(slim);
+  } catch (err) {
+    next(err);
+  }
+});
+
 openRouter.get("/projects", async (_req, res, next) => {
   try {
     res.json(await redmineClient.getProjects());
@@ -142,6 +180,7 @@ openRouter.post("/issues", async (req, res, next) => {
       await redmineClient.updateIssue(issue.id, { tracker_id: parsed.data.trackerId });
     }
 
+    allIssuesCache = null;
     res.status(201).json({ id: issue.id });
   } catch (err) {
     next(err);
@@ -172,6 +211,7 @@ openRouter.put("/issues/:id", async (req, res, next) => {
     if (parsed.data.trackerId !== undefined) fields.tracker_id = parsed.data.trackerId;
 
     await redmineClient.updateIssue(Number(req.params.id), fields, parsed.data.notes);
+    allIssuesCache = null;
     res.json({ ok: true });
   } catch (err) {
     next(err);

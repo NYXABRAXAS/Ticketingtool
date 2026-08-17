@@ -75,6 +75,7 @@ export interface RedmineIssue {
   created_on: string;
   updated_on: string;
   closed_on?: string;
+  due_date?: string;
   journals?: RedmineJournal[];
   attachments?: RedmineAttachment[];
 }
@@ -196,6 +197,12 @@ export const redmineClient = {
       status_id: "*",
       ...(updatedSince ? { updated_on: `>=${updatedSince}` } : {}),
     });
+  },
+
+  // Every issue the API key can see, across all projects - used by the read-only
+  // cross-project dashboard rather than the per-project ticket views.
+  async getAllIssues(): Promise<RedmineIssue[]> {
+    return paginateAll<RedmineIssue>("issues.json", "issues", { status_id: "*" });
   },
 
   async createIssue(params: {

@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prohorizon MIS | OPTIM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --pro-red: #D32F2F;
+            --ref-grey: #666666;
+            --border-grey: #cccccc;
+        }
+        .clickable { cursor: pointer; transition: all 0.2s; }
+        .clickable:hover { background-color: #fee2e2 !important; color: var(--pro-red) !important; font-weight: 800; }
+        .border-custom { border: 1px solid var(--border-grey); }
+        .table-container { max-height: 500px; overflow-y: auto; border: 1px solid var(--border-grey); }
+        .tat-alert { background-color: #fef2f2 !important; }
+        .tat-alert td { color: #b91c1c; }
+        .tat-alert .tat-keep-color { color: inherit !important; }
+        th {
+            position: sticky;
+            top: 0;
+            background: var(--ref-grey) !important;
+            color: white !important;
+            z-index: 10;
+            padding: 10px;
+            font-size: 10px;
+            text-transform: uppercase;
+            border: 1px solid #555555;
+        }
+        td { padding: 8px 10px; border: 1px solid #e5e7eb; font-size: 11px; color: #1e293b; }
+        tr:nth-child(even) { background-color: #f9fafb; }
+        .btn-action { font-size: 9px; font-weight: 900; text-transform: uppercase; padding: 4px 10px; border-radius: 2px; }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+        .modal-card { background: white; border-radius: 4px; width: 100%; max-width: 560px; padding: 20px; border-top: 4px solid var(--pro-red); }
+        .field-label { display:block; font-size: 10px; font-weight: 900; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+        .field-input { width: 100%; border: 1px solid #cbd5e1; padding: 8px; border-radius: 4px; font-size: 12px; font-weight: 600; outline: none; }
+    </style>
+</head>
+<body class="bg-[#fcfcfc] p-4 font-sans text-slate-900">
+
+    <div id="appScreen">
+        <div class="bg-white rounded shadow-sm mb-4 border-t-4 border-[#D32F2F] p-4 border-custom">
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-10 border-l-4 border-slate-700 pl-3">
+                        <h1 class="text-xl font-black">PROHORIZON <span class="text-[#D32F2F]">DIGITECH</span></h1>
+                        <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Loan Origination System | OPTIM &mdash; Open Access, No Login</p>
+                    </div>
+                </div>
+
+                <div class="flex items-end gap-2 flex-wrap justify-end">
+                    <div>
+                        <label class="block text-[8px] font-black text-slate-400 uppercase mb-1">From</label>
+                        <input type="date" id="startDate" class="border border-slate-300 p-2 rounded text-xs font-bold outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[8px] font-black text-slate-400 uppercase mb-1">To</label>
+                        <input type="date" id="endDate" class="border border-slate-300 p-2 rounded text-xs font-bold outline-none">
+                    </div>
+                    <button onclick="applyDateFilter()" class="bg-[#D32F2F] text-white px-5 py-2 rounded text-[10px] font-black uppercase">Apply Filter</button>
+                    <button onclick="clearDateFilter()" class="bg-[#666666] text-white px-5 py-2 rounded text-[10px] font-black uppercase">Refresh</button>
+                    <button onclick="openCreateModal()" class="bg-slate-800 text-white px-5 py-2 rounded text-[10px] font-black uppercase">+ Create Issue</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <div class="bg-slate-100 px-3 py-2 text-[10px] font-black uppercase border-custom border-b-0 rounded-t">Overall Project Summary</div>
+            <div class="bg-white shadow-sm overflow-x-auto border-custom rounded-b">
+                <table class="w-full text-center" id="summaryTable">
+                    <thead>
+                        <tr>
+                            <th class="text-left">Project Name</th>
+                            <th>Total</th><th>Pending</th><th>Resolved</th>
+                            <th>SR</th><th>CR</th><th>Repeat</th><th>Support</th><th>Feature</th><th>Task</th>
+                        </tr>
+                    </thead>
+                    <tbody id="projectSummary"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <div class="bg-[#666666] text-white px-3 py-2 flex flex-wrap justify-between items-center gap-2 rounded-t border-custom border-b-0">
+                <span class="text-[10px] font-black uppercase">Assignee Wise Breakdown</span>
+                <div class="flex gap-2 items-center flex-wrap">
+                    <select id="assigneeProjectFilter" onchange="applyAssigneeFilters()" class="text-black font-bold p-1 px-2 text-[10px] rounded-sm outline-none">
+                        <option value="">All Projects</option>
+                    </select>
+                    <select id="assigneeNameFilter" onchange="applyAssigneeFilters()" class="text-black font-bold p-1 px-2 text-[10px] rounded-sm outline-none">
+                        <option value="">All Assignees</option>
+                    </select>
+                    <button onclick="exportExcel('assigneeTable', 'Assignee_Report')" class="btn-action bg-white text-slate-800">Export Excel</button>
+                </div>
+            </div>
+            <div class="bg-white shadow-sm table-container border-custom rounded-b">
+                <table class="w-full text-center" id="assigneeTable">
+                    <thead>
+                        <tr>
+                            <th class="text-left">Project</th><th class="text-left">Assignee</th>
+                            <th>Total</th><th>Pending</th><th>Resolved</th>
+                            <th>SR</th><th>CR</th><th>Repeat</th><th>Support</th><th>Feature</th><th>Task</th>
+                        </tr>
+                    </thead>
+                    <tbody id="assigneeResolution"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mb-10">
+            <div class="bg-[#D32F2F] text-white p-2.5 flex justify-between items-center rounded-t shadow-md">
+                <span id="detailTitle" class="text-[10px] font-black uppercase tracking-widest">TICKET DETAILS</span>
+                <div class="flex gap-2 items-center">
+                    <input type="text" id="searchBox" onkeyup="searchTable()" placeholder="SEARCH..." class="text-black font-bold p-1 px-3 text-[10px] w-40 rounded-sm outline-none">
+                    <button onclick="exportExcel('detailsTable', 'Ticket_Details')" class="btn-action bg-white text-slate-800">Export Excel</button>
+                    <button onclick="shareOnWhatsApp()" class="btn-action bg-[#25D366] text-white">Share WhatsApp</button>
+                </div>
+            </div>
+            <div class="bg-white shadow-lg table-container border-custom rounded-b">
+                <table class="w-full border-collapse" id="detailsTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th><th class="text-left">Project</th><th class="text-left">Subject</th>
+                            <th>Tracker</th><th>Status</th><th class="text-left">Assignee</th>
+                            <th>Created</th><th>Due / TAT</th><th>Age</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ticketTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="createModal" class="modal-backdrop hidden">
+        <div class="modal-card">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-sm font-black uppercase tracking-widest">Create Issue</h2>
+                <button onclick="closeCreateModal()" class="text-slate-400 font-black text-lg leading-none">&times;</button>
+            </div>
+            <p id="createError" class="hidden mb-3 text-xs font-bold text-red-700"></p>
+
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                    <label class="field-label">Project</label>
+                    <select id="createProject" class="field-input" onchange="onCreateProjectChange()"></select>
+                </div>
+                <div>
+                    <label class="field-label">Tracker</label>
+                    <select id="createTracker" class="field-input"></select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                    <label class="field-label">Priority</label>
+                    <select id="createPriority" class="field-input"></select>
+                </div>
+                <div>
+                    <label class="field-label">Assign To</label>
+                    <select id="createAssignee" class="field-input">
+                        <option value="">Unassigned</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="field-label">Subject</label>
+                <input id="createSubject" type="text" class="field-input" maxlength="255">
+            </div>
+            <div class="mb-3">
+                <label class="field-label">Description</label>
+                <textarea id="createDescription" class="field-input" rows="4"></textarea>
+            </div>
+            <div class="mb-4">
+                <label class="field-label">Attachment (optional)</label>
+                <input id="createAttachment" type="file" accept=".png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx,.txt" class="text-xs">
+            </div>
+
+            <div class="flex gap-2">
+                <button id="createSubmitBtn" onclick="submitCreateIssue()" class="bg-[#D32F2F] text-white px-5 py-2 rounded text-[10px] font-black uppercase">Create Issue</button>
+                <button onclick="closeCreateModal()" class="bg-slate-200 text-slate-700 px-5 py-2 rounded text-[10px] font-black uppercase">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// Backend host: this page is a static file, not part of the Vite/React build, so it
+// can't read import.meta.env - the URL is public (CORS on the backend already
+// restricts which origins may call it with credentials; this page sends none).
+const API_BASE = "https://los-ticketing-backend.onrender.com";
+const OPEN_API = `${API_BASE}/api/open`;
+
+let allIssues = [];
+let filteredIssues = [];
+let currentDisplayList = [];
+let currentSelection = null;
+let assigneeProjectFilterValue = "";
+let assigneeNameFilterValue = "";
+let redmineBaseUrl = "";
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+async function loadConfig() {
+    try {
+        const res = await fetch(`${OPEN_API}/config`);
+        const data = await res.json();
+        redmineBaseUrl = data.redmineBaseUrl || "";
+    } catch (err) {
+        console.error("Config load failed", err);
+    }
+}
+
+async function loadData() {
+    try {
+        const res = await fetch(`${OPEN_API}/issues/all`);
+        const data = await res.json();
+        allIssues = Array.isArray(data) ? data : [];
+        filteredIssues = [...allIssues];
+        updateDashboard();
+    } catch (err) {
+        console.error("Data Load Failed", err);
+    }
+}
+
+function getAssigneeFilterScopedIssues() {
+    return filteredIssues.filter(i => {
+        const project = i.project.name;
+        const assignee = i.assigned_to?.name || "Unassigned";
+        if (assigneeProjectFilterValue && project !== assigneeProjectFilterValue) return false;
+        if (assigneeNameFilterValue && assignee !== assigneeNameFilterValue) return false;
+        return true;
+    });
+}
+
+function renderScopedFullList() {
+    currentDisplayList = getAssigneeFilterScopedIssues();
+    const parts = [];
+    if (assigneeProjectFilterValue) parts.push(assigneeProjectFilterValue);
+    if (assigneeNameFilterValue) parts.push(assigneeNameFilterValue);
+    const label = parts.length ? parts.join(" / ") : "Full List";
+    renderDetails(label, currentDisplayList);
+}
+
+function updateDashboard() {
+    renderProjectSummary();
+    renderAssigneeBreakdown();
+    if (currentSelection) {
+        applyStoredSelection();
+        return;
+    }
+    renderScopedFullList();
+}
+
+function applyDateFilter() {
+    const start = document.getElementById("startDate")?.value;
+    const end = document.getElementById("endDate")?.value;
+    filteredIssues = allIssues.filter(i => {
+        const date = i.created_on.split("T")[0];
+        return (!start || date >= start) && (!end || date <= end);
+    });
+    updateDashboard();
+}
+
+function clearDateFilter() {
+    const startInput = document.getElementById("startDate");
+    const endInput = document.getElementById("endDate");
+    if (startInput) startInput.value = "";
+    if (endInput) endInput.value = "";
+    filteredIssues = [...allIssues];
+    updateDashboard();
+    loadData();
+}
+
+function getSelectionList(type, val, cat) {
+    let list = [];
+    if (type === "proj") {
+        list = filteredIssues.filter(i => i.project.name === val);
+        if (cat === "Pending") list = list.filter(i => !isRes(i.status.name));
+        if (cat === "Resolved") list = list.filter(i => isRes(i.status.name));
+    } else if (type === "proj-t") {
+        list = filteredIssues.filter(i => i.project.name === val && i.tracker.name === cat && !isRes(i.status.name));
+    } else if (type === "user") {
+        const [p, u] = val.split("|");
+        list = filteredIssues.filter(i => i.project.name === p && (i.assigned_to?.name || "Unassigned") === u);
+        if (cat === "Pending") list = list.filter(i => !isRes(i.status.name));
+        if (cat === "Resolved") list = list.filter(i => isRes(i.status.name));
+    } else if (type === "user-t") {
+        const [p, u] = val.split("|");
+        list = filteredIssues.filter(i => i.project.name === p && (i.assigned_to?.name || "Unassigned") === u && i.tracker.name === cat && !isRes(i.status.name));
+    }
+    return list;
+}
+
+function applyStoredSelection(scroll = false) {
+    if (!currentSelection) return;
+    const list = getSelectionList(currentSelection.type, currentSelection.val, currentSelection.cat);
+    currentDisplayList = list;
+    renderDetails(`${currentSelection.val} (${currentSelection.cat})`, list);
+    if (scroll) {
+        document.getElementById("detailsTable").scrollIntoView({ behavior: "smooth" });
+    }
+}
+
+const isRes = (s) => ["Resolved", "Closed", "Rejected", "Completed"].includes(s);
+
+function getTatDate(issue) {
+    return issue.due_date || null;
+}
+
+function isOutOfTat(issue) {
+    const tatDate = getTatDate(issue);
+    if (!tatDate || isRes(issue.status.name)) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(`${tatDate}T00:00:00`);
+    return due < today;
+}
+
+function renderProjectSummary() {
+    const pMap = {};
+    filteredIssues.forEach(i => {
+        const p = i.project.name;
+        if (!pMap[p]) pMap[p] = { total: 0, pend: 0, res: 0, SR: 0, CR: 0, RSR: 0, SUP: 0, FEA: 0, TASK: 0 };
+        pMap[p].total++;
+        if (isRes(i.status.name)) pMap[p].res++;
+        else {
+            pMap[p].pend++;
+            const t = i.tracker.name;
+            if (t === "SR") pMap[p].SR++;
+            else if (t === "CR") pMap[p].CR++;
+            else if (t === "Repeated SR") pMap[p].RSR++;
+            else if (t === "Support") pMap[p].SUP++;
+            else if (t === "Feature") pMap[p].FEA++;
+            else if (t === "Task") pMap[p].TASK++;
+        }
+    });
+
+    let html = "";
+    Object.keys(pMap).sort().forEach(name => {
+        const d = pMap[name];
+        html += `<tr>
+            <td class="text-left font-bold border-l-4 border-slate-300">${escapeHtml(name)}</td>
+            <td class="clickable font-black" onclick="filterDetail('proj', '${escapeHtml(name)}', 'Total')">${d.total}</td>
+            <td class="clickable text-[#D32F2F] font-black" onclick="filterDetail('proj', '${escapeHtml(name)}', 'Pending')">${d.pend}</td>
+            <td class="clickable text-green-600 font-black" onclick="filterDetail('proj', '${escapeHtml(name)}', 'Resolved')">${d.res}</td>
+            <td class="clickable" onclick="filterDetail('proj-t', '${escapeHtml(name)}', 'SR')">${d.SR}</td>
+            <td class="clickable" onclick="filterDetail('proj-t', '${escapeHtml(name)}', 'CR')">${d.CR}</td>
+            <td class="clickable" onclick="filterDetail('proj-t', '${escapeHtml(name)}', 'Repeated SR')">${d.RSR}</td>
+            <td class="clickable" onclick="filterDetail('proj-t', '${escapeHtml(name)}', 'Support')">${d.SUP}</td>
+            <td class="clickable" onclick="filterDetail('proj-t', '${escapeHtml(name)}', 'Feature')">${d.FEA}</td>
+            <td class="clickable" onclick="filterDetail('proj-t', '${escapeHtml(name)}', 'Task')">${d.TASK}</td>
+        </tr>`;
+    });
+    document.getElementById("projectSummary").innerHTML = html;
+}
+
+function populateAssigneeFilterOptions() {
+    const projectSelect = document.getElementById("assigneeProjectFilter");
+    const nameSelect = document.getElementById("assigneeNameFilter");
+    if (!projectSelect || !nameSelect) return;
+
+    const projects = [...new Set(filteredIssues.map(i => i.project.name))].sort();
+    const assignees = [...new Set(filteredIssues.map(i => i.assigned_to?.name || "Unassigned"))].sort();
+
+    if (!projects.includes(assigneeProjectFilterValue)) assigneeProjectFilterValue = "";
+    if (!assignees.includes(assigneeNameFilterValue)) assigneeNameFilterValue = "";
+
+    const buildOptions = (allLabel, values, current) => {
+        let html = `<option value="">${allLabel}</option>`;
+        values.forEach(v => {
+            html += `<option value="${escapeHtml(v)}" ${v === current ? "selected" : ""}>${escapeHtml(v)}</option>`;
+        });
+        return html;
+    };
+
+    projectSelect.innerHTML = buildOptions("All Projects", projects, assigneeProjectFilterValue);
+    nameSelect.innerHTML = buildOptions("All Assignees", assignees, assigneeNameFilterValue);
+}
+
+function applyAssigneeFilters() {
+    assigneeProjectFilterValue = document.getElementById("assigneeProjectFilter").value;
+    assigneeNameFilterValue = document.getElementById("assigneeNameFilter").value;
+    renderAssigneeBreakdown();
+    if (currentSelection) {
+        applyStoredSelection();
+    } else {
+        renderScopedFullList();
+    }
+}
+
+function renderAssigneeBreakdown() {
+    populateAssigneeFilterOptions();
+
+    const breakdownSource = getAssigneeFilterScopedIssues();
+
+    const uMap = {};
+    breakdownSource.forEach(i => {
+        const p = i.project.name;
+        const u = i.assigned_to?.name || "Unassigned";
+        const key = `${p}|${u}`;
+        if (!uMap[key]) uMap[key] = { p, u, total: 0, pend: 0, res: 0, SR: 0, CR: 0, RSR: 0, SUP: 0, FEA: 0, TASK: 0 };
+        uMap[key].total++;
+        if (isRes(i.status.name)) uMap[key].res++;
+        else {
+            uMap[key].pend++;
+            const t = i.tracker.name;
+            if (t === "SR") uMap[key].SR++;
+            else if (t === "CR") uMap[key].CR++;
+            else if (t === "Repeated SR") uMap[key].RSR++;
+            else if (t === "Support") uMap[key].SUP++;
+            else if (t === "Feature") uMap[key].FEA++;
+            else if (t === "Task") uMap[key].TASK++;
+        }
+    });
+
+    let html = "";
+    Object.values(uMap).sort((a, b) => a.p.localeCompare(b.p)).forEach(d => {
+        const safeKey = `${d.p}|${d.u}`;
+        html += `<tr>
+            <td class="text-left text-slate-400 font-medium">${escapeHtml(d.p)}</td>
+            <td class="text-left font-bold text-slate-800">${escapeHtml(d.u)}</td>
+            <td class="clickable font-black" onclick="filterDetail('user', '${escapeHtml(safeKey)}', 'Total')">${d.total}</td>
+            <td class="clickable text-[#D32F2F] font-black" onclick="filterDetail('user', '${escapeHtml(safeKey)}', 'Pending')">${d.pend}</td>
+            <td class="clickable text-green-600 font-black" onclick="filterDetail('user', '${escapeHtml(safeKey)}', 'Resolved')">${d.res}</td>
+            <td class="clickable" onclick="filterDetail('user-t', '${escapeHtml(safeKey)}', 'SR')">${d.SR}</td>
+            <td class="clickable" onclick="filterDetail('user-t', '${escapeHtml(safeKey)}', 'CR')">${d.CR}</td>
+            <td class="clickable" onclick="filterDetail('user-t', '${escapeHtml(safeKey)}', 'Repeated SR')">${d.RSR}</td>
+            <td class="clickable" onclick="filterDetail('user-t', '${escapeHtml(safeKey)}', 'Support')">${d.SUP}</td>
+            <td class="clickable" onclick="filterDetail('user-t', '${escapeHtml(safeKey)}', 'Feature')">${d.FEA}</td>
+            <td class="clickable" onclick="filterDetail('user-t', '${escapeHtml(safeKey)}', 'Task')">${d.TASK}</td>
+        </tr>`;
+    });
+    document.getElementById("assigneeResolution").innerHTML = html;
+}
+
+function filterDetail(type, val, cat) {
+    currentSelection = { type, val, cat };
+    applyStoredSelection(true);
+}
+
+function renderDetails(label, list) {
+    document.getElementById("detailTitle").innerText = `TICKET DETAILS: ${label.toUpperCase()} (${list.length})`;
+    let html = "";
+    list.forEach(i => {
+        const created = new Date(i.created_on);
+        const diffHrs = Math.floor((Date.now() - created) / 3600000);
+        const age = diffHrs < 24 ? `${diffHrs}h` : `${Math.floor(diffHrs / 24)}d`;
+        const outOfTat = isOutOfTat(i);
+        const tatDate = getTatDate(i);
+        const tatText = tatDate ? new Date(`${tatDate}T00:00:00`).toLocaleDateString("en-GB") : "-";
+        const rowClass = outOfTat ? "tat-alert" : "";
+        const subjectClass = outOfTat ? "max-w-xs truncate font-bold tat-keep-color" : "max-w-xs truncate font-bold";
+        const ageClass = outOfTat ? "text-center font-black text-red-700" : "text-center font-black";
+        const tatClass = outOfTat ? "text-center font-black text-red-700" : "text-center font-black text-slate-500";
+        const issueLink = redmineBaseUrl ? `${redmineBaseUrl}/issues/${i.id}` : "#";
+
+        html += `<tr class="${rowClass}">
+            <td class="font-black text-[#D32F2F] underline"><a href="${issueLink}" target="_blank" rel="noreferrer">${i.id}</a></td>
+            <td class="font-bold text-slate-500">${escapeHtml(i.project.name)}</td>
+            <td class="${subjectClass}" title="${escapeHtml(i.subject)}">${escapeHtml(i.subject)}</td>
+            <td class="text-center font-bold text-slate-500">${escapeHtml(i.tracker.name)}</td>
+            <td class="text-center"><span class="px-2 py-0.5 rounded-sm text-[9px] font-black uppercase ${isRes(i.status.name) ? "bg-green-600 text-white" : "bg-[#D32F2F] text-white"}">${escapeHtml(i.status.name)}</span></td>
+            <td class="font-black">${escapeHtml(i.assigned_to?.name || "Unassigned")}</td>
+            <td class="text-center">${created.toLocaleDateString("en-GB")}</td>
+            <td class="${tatClass}">${tatText}</td>
+            <td class="${ageClass}">${age}</td>
+        </tr>`;
+    });
+    document.getElementById("ticketTable").innerHTML = html;
+}
+
+function exportExcel(tableId, filename) {
+    const table = document.getElementById(tableId);
+    const wb = XLSX.utils.table_to_book(table);
+    XLSX.writeFile(wb, `${filename}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+function shareOnWhatsApp() {
+    let msg = `OPTIM REPORT\nCount: ${currentDisplayList.length}\n\n`;
+    currentDisplayList.slice(0, 10).forEach(i => {
+        msg += `#${i.id}: ${i.subject.substring(0, 30)}...\n`;
+    });
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+}
+
+let searchDebounceTimer = null;
+function searchTable() {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        const term = document.getElementById("searchBox").value.toLowerCase();
+        const rows = document.querySelectorAll("#ticketTable tr");
+        rows.forEach(r => {
+            r.style.display = r.innerText.toLowerCase().includes(term) ? "" : "none";
+        });
+    }, 120);
+}
+
+// --- Create Issue ---
+
+function setCreateError(message) {
+    const el = document.getElementById("createError");
+    if (!message) {
+        el.classList.add("hidden");
+        el.innerText = "";
+        return;
+    }
+    el.classList.remove("hidden");
+    el.innerText = message;
+}
+
+async function openCreateModal() {
+    setCreateError("");
+    document.getElementById("createModal").classList.remove("hidden");
+    document.getElementById("createSubject").value = "";
+    document.getElementById("createDescription").value = "";
+    document.getElementById("createAttachment").value = "";
+
+    try {
+        const [projects, trackers, priorities] = await Promise.all([
+            fetch(`${OPEN_API}/projects`).then(r => r.json()),
+            fetch(`${OPEN_API}/trackers`).then(r => r.json()),
+            fetch(`${OPEN_API}/priorities`).then(r => r.json()),
+        ]);
+        const projectSelect = document.getElementById("createProject");
+        projectSelect.innerHTML = projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+        document.getElementById("createTracker").innerHTML = trackers.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join("");
+        document.getElementById("createPriority").innerHTML = priorities.map(p => `<option value="${p.id}" ${p.is_default ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("");
+
+        await onCreateProjectChange();
+    } catch (err) {
+        setCreateError("Could not load project/tracker/priority options.");
+        console.error(err);
+    }
+}
+
+function closeCreateModal() {
+    document.getElementById("createModal").classList.add("hidden");
+}
+
+async function onCreateProjectChange() {
+    const projectId = document.getElementById("createProject").value;
+    const assigneeSelect = document.getElementById("createAssignee");
+    assigneeSelect.innerHTML = `<option value="">Unassigned</option>`;
+    if (!projectId) return;
+    try {
+        const members = await fetch(`${OPEN_API}/projects/${projectId}/members`).then(r => r.json());
+        assigneeSelect.innerHTML += members.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join("");
+    } catch (err) {
+        console.error("Member load failed", err);
+    }
+}
+
+async function submitCreateIssue() {
+    setCreateError("");
+    const projectId = Number(document.getElementById("createProject").value);
+    const trackerId = Number(document.getElementById("createTracker").value) || undefined;
+    const priorityId = Number(document.getElementById("createPriority").value) || undefined;
+    const assignedToId = document.getElementById("createAssignee").value ? Number(document.getElementById("createAssignee").value) : undefined;
+    const subject = document.getElementById("createSubject").value.trim();
+    const description = document.getElementById("createDescription").value.trim();
+    const file = document.getElementById("createAttachment").files[0];
+
+    if (!projectId) { setCreateError("Select a project."); return; }
+    if (!subject) { setCreateError("Subject is required."); return; }
+
+    const btn = document.getElementById("createSubmitBtn");
+    btn.disabled = true;
+    btn.innerText = "Creating...";
+
+    try {
+        const res = await fetch(`${OPEN_API}/issues`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ projectId, trackerId, priorityId, assignedToId, subject, description }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Could not create issue.");
+
+        if (file) {
+            const form = new FormData();
+            form.append("file", file);
+            await fetch(`${OPEN_API}/issues/${data.id}/attachments`, { method: "POST", body: form }).catch(() => undefined);
+        }
+
+        closeCreateModal();
+        await loadData();
+    } catch (err) {
+        setCreateError(err.message || "Could not create issue.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Create Issue";
+    }
+}
+
+loadConfig();
+loadData();
+</script>
+</body>
+</html>
